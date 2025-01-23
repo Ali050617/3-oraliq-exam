@@ -1,60 +1,77 @@
-from django.shortcuts import render, get_object_or_404
-from django.db.models import Q
-from .models import Post, Category
+from django.shortcuts import render, get_object_or_404, redirect
 from tags.models import Tag
-
-
-def index(request):
-    categories = Category.objects.all()
-    tags = Tag.objects.all()
-    featured_posts = Post.objects.filter(featured=True)[:5]
-    recent_posts = Post.objects.order_by('-created_at')[:5]
-
-    context = {
-        'categories': categories,
-        'tags': tags,
-        'featured_posts': featured_posts,
-        'recent_posts': recent_posts,
-    }
-    return render(request, 'index_with_side_bar.html', context)
+from django.db.models import Count
+from catalogs.models import Catalog
+from .models import Post, Comment
+from .forms import CommentForm
 
 
 def post_list(request):
-    posts = Post.objects.all()
-    categories = Category.objects.all()
-    tags = Tag.objects.all()
+    posts = Post.objects.annotate(comments_count=Count('comments'))
+    selected_catalogs = request.GET.getlist('catalog')
+    selected_tags = request.GET.getlist('tag')
+    sort_by = request.GET.get('sort', '')
+    search_query = request.GET.get('search', '')
 
-    category = request.GET.get('category')
-    tag = request.GET.get('tag')
-    date_from = request.GET.get('date_from')
-    date_to = request.GET.get('date_to')
-    sort = request.GET.get('sort', '-created_at')
+    if 'all' in selected_catalogs:
+        posts = Post.objects.all()
+    elif selected_catalogs:
+        posts = posts.filter(catalog__id__in=[int(catalog) for catalog in selected_catalogs if catalog.isdigit()])
 
-    if category:
-        posts = posts.filter(category__slug=category)
-    if tag:
-        posts = posts.filter(tags__slug=tag)
-    if date_from:
-        posts = posts.filter(created_at__gte=date_from)
-    if date_to:
-        posts = posts.filter(created_at__lte=date_to)
+    if selected_tags:
+        posts = posts.filter(tag__id__in=selected_tags)
 
-    posts = posts.order_by(sort)
+    if search_query:
+        posts = posts.filter(name__icontains=search_query)
+
+    if sort_by == 'latest':
+        posts = posts.order_by('-created_at')
+    elif sort_by == 'oldest':
+        posts = posts.order_by('created_at')
+    elif sort_by == 'popular':
+        posts = posts.order_by('-comments_count')
 
     ctx = {
         'posts': posts,
-        'categories': categories,
-        'tags': tags,
-        'selected_category': category,
-        'selected_tag': tag,
-        'date_from': date_from,
-        'date_to': date_to,
-        'sort': sort,
+        'catalogs': Catalog.objects.all(),
+        'tags': Tag.objects.all(),
+        'selected_catalogs': [int(catalog) for catalog in selected_catalogs if catalog.isdigit()],
+        'selected_tags': [int(c) for c in selected_tags],
+        'current_sort': sort_by,
+        'search_query': search_query,
     }
+    return render(request, 'index_with_side_bar.html', ctx)
+
+
+def blog_detail(request, year, month, day, slug):
+    post = get_object_or_404(
+        Post,
+        slug=slug,
+        created_at__year=year,
+        created_at__month=month,
+        created_at__day=day
+    )
+
+    if request.method == 'POST':
+        form = CommentForm(request.POST)
+        if form.is_valid():
+            Comment.objects.create(
+                name=form.cleaned_data['name'],
+                email=form.cleaned_data['email'],
+                comment=form.cleaned_data['comment'],
+                post=post
+            )
+            return redirect(post.get_detail_url())
+    else:
+        form = CommentForm()
+
+    comments = Comment.objects.filter(post=post)
+
+    ctx = {
+        'post': post,
+        'form': form,
+        'comments': comments,
+    }
+
     return render(request, 'posts/post-detail.html', ctx)
-
-
-def post_detail(request, slug):
-    post = get_object_or_404(Post, slug=slug)
-    return render(request, 'posts/post-detail.html', {'post': post})
 

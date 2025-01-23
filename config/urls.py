@@ -18,15 +18,11 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from posts.views import index
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('author/', include('authors.urls')),
-    path('catalogs/', include('catalogs.urls')),
-    path('posts/', include('posts.urls')),
-    path('tags/', include('tags.urls')),
-    path('', index, name='index')
+    path('', include('posts.urls')),
 ]
 
 if settings.DEBUG:

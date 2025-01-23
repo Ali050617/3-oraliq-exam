@@ -1,11 +1,14 @@
-from django.db import models
-from django.contrib.auth.models import User
 from posts.base_models import BaseModels
+from django.db import models
 
 
 class Author(BaseModels):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
-    bio = models.TextField(blank=True)
+    full_name = models.CharField(max_length=200)
+    email = models.EmailField(unique=True)
+    bod = models.DateField()
+    description = models.TextField()
+    image = models.ImageField(upload_to='authors/')
 
     def __str__(self):
-        return self.user
+        return f"{self.full_name}"
+
